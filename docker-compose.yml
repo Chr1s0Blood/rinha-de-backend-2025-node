@@ -1,0 +1,91 @@
+services:
+  haproxy:
+    image: haproxy:alpine
+    ports:
+      - "9999:80"
+    networks:
+      - backend
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+      - socket_volume:/var/run
+    depends_on:
+      - backend-1
+      - backend-2
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 35M
+
+  backend-1:
+    image: chrisblood777/rinha-de-backend-2025-node:latest
+    networks:
+      - backend
+      - payment-processor
+    environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - SOCKET_PATH=/tmp/memorydb.sock
+      - ZEROMQ_SUFFIXS=1
+      - SOCKET_PATH_SERVER=/var/run/server1.sock
+      - NODE_ENV=production
+    volumes:
+      - socket_volume:/tmp
+      - socket_volume:/var/run
+    depends_on:
+      - memorydb
+    deploy:
+      resources:
+        limits:
+          cpus: "0.55"
+          memory: 120M
+
+  backend-2:
+    image: chrisblood777/rinha-de-backend-2025-node:latest
+    networks:
+      - backend
+      - payment-processor
+    environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - SOCKET_PATH=/tmp/memorydb.sock
+      - ZEROMQ_SUFFIXS=2
+      - SOCKET_PATH_SERVER=/var/run/server2.sock
+      - NODE_ENV=production
+    volumes:
+      - socket_volume:/tmp
+      - socket_volume:/var/run
+    depends_on:
+      - memorydb
+    deploy:
+      resources:
+        limits:
+          cpus: "0.55"
+          memory: 120M
+
+  memorydb:
+    image: chrisblood777/rinha-de-backend-2025-node-memorydb:latest
+    networks:
+      - backend
+      - payment-processor
+    environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - SOCKET_PATH=/tmp/memorydb.sock
+      - ZEROMQ_SUFFIXS=1,2
+    volumes:
+      - socket_volume:/tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 50M
+
+volumes:
+  socket_volume:
+
+networks:
+  backend:
+    driver: bridge
+  payment-processor:
+    external: true

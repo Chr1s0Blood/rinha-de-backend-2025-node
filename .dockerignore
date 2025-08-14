@@ -1,0 +1,4 @@
+*.lnk
+node_modules
+.git
+memorydb

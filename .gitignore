@@ -1,0 +1,5 @@
+node_modules
+.clinic
+new-processor.txt
+.env
+requests.http

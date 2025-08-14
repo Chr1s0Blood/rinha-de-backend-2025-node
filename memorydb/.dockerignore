@@ -1,0 +1,3 @@
+*.lnk
+node_modules
+.git
