@@ -215,8 +215,10 @@ const paymentQueue = new PaymentQueue();
 
 if (parentPort) {
   parentPort.once("message", ({port}: {port: MessagePort}) => {
-    port.on("message", (data: IPaymentDataRaw) => {
-      paymentQueue.add(data);
+    port.on("message", (data: IPaymentDataRaw[]) => {
+      for (const item of data) {
+        paymentQueue.add(item);
+      }
     });
   });
 }

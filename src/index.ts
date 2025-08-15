@@ -4,14 +4,43 @@ import { readJsonFromUWS } from "./helpers.ts";
 import { getSummaryFromDb, purgePayments } from "./services.ts";
 import fs from "node:fs";
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 const { port1, port2 } = new MessageChannel();
 
-const app = App();
+const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || "50", 10);
+const BATCH_TIMEOUT = parseInt(process.env.BATCH_TIMEOUT || "1000", 10);
 
+let paymentBatch: any[] = [];
+let batchTimeout: NodeJS.Timeout | null = null;
+
+function sendBatchToWorker() {
+  if (paymentBatch.length > 0) {
+    const batch = [...paymentBatch];
+    paymentBatch = [];
+
+    port1.postMessage(batch);
+
+    if (batchTimeout) {
+      clearTimeout(batchTimeout);
+      batchTimeout = null;
+    }
+  }
+}
+
+function addPaymentToBatch(payment: any) {
+  paymentBatch.push(payment);
+
+  if (paymentBatch.length >= BATCH_SIZE) {
+    sendBatchToWorker();
+  } else {
+    if (!batchTimeout) {
+      batchTimeout = setTimeout(() => {
+        sendBatchToWorker();
+      }, BATCH_TIMEOUT);
+    }
+  }
+}
+
+const app = App();
 
 function processPaymentRequest(res: HttpResponse, req: HttpRequest) {
   let hasResponded = false;
@@ -23,7 +52,7 @@ function processPaymentRequest(res: HttpResponse, req: HttpRequest) {
 
   try {
     readJsonFromUWS(res).then((body) => {
-      port1.postMessage(body);
+      addPaymentToBatch(body);
     });
 
     res.cork(() => {
@@ -31,7 +60,6 @@ function processPaymentRequest(res: HttpResponse, req: HttpRequest) {
     });
 
     hasResponded = true;
-
   } catch (error) {
     if (!hasResponded) {
       hasResponded = true;
@@ -59,8 +87,6 @@ app.get("/payments-summary", async (res, req) => {
   const to = params.to;
 
   if (hasResponded) return;
-
-  // await sleep(1000);
 
   const summary = await getSummaryFromDb(from, to);
 
@@ -102,21 +128,23 @@ switch (process.env.NODE_ENV) {
       fs.unlinkSync(SOCKET_PATH_SERVER);
     }
 
-    app.listen_unix((token) => {
-      if (token) {
-        console.log(`Listening to socket ${SOCKET_PATH_SERVER}`);
-        fs.chmodSync(SOCKET_PATH_SERVER, 0o766);
-      } else {
-        console.log(`Failed to listen to socket ${SOCKET_PATH_SERVER}`);
-      }
-    }, SOCKET_PATH_SERVER);
+    app.listen_unix(
+      (token) => {
+        if (token) {
+          console.log(`Listening to socket ${SOCKET_PATH_SERVER}`);
+          fs.chmodSync(SOCKET_PATH_SERVER, 0o766);
+        } else {
+          console.log(`Failed to listen to socket ${SOCKET_PATH_SERVER}`);
+        }
+      },
+      SOCKET_PATH_SERVER
+    );
     break;
 
   default:
     console.error("Unknown environment:", process.env.NODE_ENV);
     break;
 }
-
 
 const totalWorkers = 1;
 const allSuffixes = process.env.ZEROMQ_SUFFIXS!.split(",").map((s) => s.trim());
@@ -134,5 +162,5 @@ for (let i = 0; i < totalWorkers; i++) {
     }
   );
 
-  worker.postMessage({port: port2}, [port2]);
+  worker.postMessage({ port: port2 }, [port2]);
 }
