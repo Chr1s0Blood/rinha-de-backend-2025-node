@@ -1,6 +1,6 @@
 import { Worker } from "node:worker_threads";
-import { App, type HttpRequest, type HttpResponse } from "uWebSockets.js";
-import { readJsonFromUWS } from "./helpers.ts";
+import http from "node:http";
+import { URL } from "node:url";
 import { getSummaryFromDb, purgePayments } from "./services.ts";
 import fs from "node:fs";
 
@@ -40,85 +40,78 @@ function addPaymentToBatch(payment: any) {
   }
 }
 
-const app = App();
-
-function processPaymentRequest(res: HttpResponse, req: HttpRequest) {
-  let hasResponded = false;
-
-  res.onAborted(() => {
-    console.log("Payment request aborted");
-    hasResponded = true;
+function readJsonFromHttp(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+    req.on("end", () => {
+      try {
+        const parsed = JSON.parse(body);
+        resolve(parsed);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on("error", reject);
   });
-
-  try {
-    readJsonFromUWS(res).then((body) => {
-      addPaymentToBatch(body);
-    });
-
-    res.cork(() => {
-      res.writeStatus("201 Created").end("", false);
-    });
-
-    hasResponded = true;
-  } catch (error) {
-    if (!hasResponded) {
-      hasResponded = true;
-      res.cork(() => {
-        res.writeStatus("400 Bad Request").end("", false);
-      });
-    }
-  }
 }
 
-app.post("/payments", processPaymentRequest);
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url!, `http://${req.headers.host}`);
+  const pathname = url.pathname;
+  const method = req.method;
 
-app.get("/payments-summary", async (res, req) => {
-  let hasResponded = false;
-  res.onAborted(() => {
-    console.log("Summary request aborted");
-    hasResponded = true;
-  });
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  const queryString = req.getQuery();
+  if (method === "OPTIONS") {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
 
-  const params = Object.fromEntries(new URLSearchParams(queryString));
+  try {
+    if (method === "POST" && pathname === "/payments") {
+      try {
+        const body = await readJsonFromHttp(req);
+        addPaymentToBatch(body);
+        res.writeHead(201, { "Content-Type": "text/plain" });
+        res.end("");
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("");
+      }
+    } else if (method === "GET" && pathname === "/payments-summary") {
+      const searchParams = url.searchParams;
+      const from = searchParams.get("from");
+      const to = searchParams.get("to");
 
-  const from = params.from;
-  const to = params.to;
+      const summary = await getSummaryFromDb(from!, to!);
 
-  if (hasResponded) return;
-
-  const summary = await getSummaryFromDb(from, to);
-
-  res.cork(() => {
-    hasResponded = true;
-    res
-      .writeStatus("200 OK")
-      .writeHeader("Content-Type", "application/json")
-      .end(summary, true);
-  });
-});
-
-app.post("/purge-payments", async (res, req) => {
-  res.onAborted(() => {
-    console.log("Purge request aborted");
-  });
-
-  await purgePayments();
-
-  res.cork(() => {
-    res.writeStatus("200 OK").end("");
-  });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(summary);
+    } else if (method === "POST" && pathname === "/purge-payments") {
+      await purgePayments();
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("");
+    } else {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Not Found");
+    }
+  } catch (error) {
+    console.error("Server error:", error);
+    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("Internal Server Error");
+  }
 });
 
 switch (process.env.NODE_ENV) {
   case "development":
-    app.listen(parseInt(process.env.PORT!, 10), (token) => {
-      if (token) {
-        console.log(`Listening to port ${process.env.PORT}`);
-      } else {
-        console.log(`Failed to listen to port ${process.env.PORT}`);
-      }
+    server.listen(parseInt(process.env.PORT!, 10), () => {
+      console.log(`Listening to port ${process.env.PORT}`);
     });
     break;
 
@@ -128,17 +121,10 @@ switch (process.env.NODE_ENV) {
       fs.unlinkSync(SOCKET_PATH_SERVER);
     }
 
-    app.listen_unix(
-      (token) => {
-        if (token) {
-          console.log(`Listening to socket ${SOCKET_PATH_SERVER}`);
-          fs.chmodSync(SOCKET_PATH_SERVER, 0o766);
-        } else {
-          console.log(`Failed to listen to socket ${SOCKET_PATH_SERVER}`);
-        }
-      },
-      SOCKET_PATH_SERVER
-    );
+    server.listen(SOCKET_PATH_SERVER, () => {
+      console.log(`Listening to socket ${SOCKET_PATH_SERVER}`);
+      fs.chmodSync(SOCKET_PATH_SERVER, 0o766);
+    });
     break;
 
   default:
