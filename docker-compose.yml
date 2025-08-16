@@ -18,7 +18,7 @@ services:
           memory: 30M
 
   backend-1:
-    image: chrisblood777/rinha-de-backend-2025-node:latest
+    image: chrisblood777/rinha-de-backend-2025-node:http-module
     networks:
       - backend
       - payment-processor
@@ -44,7 +44,7 @@ services:
           memory: 115M
 
   backend-2:
-    image: chrisblood777/rinha-de-backend-2025-node:latest
+    image: chrisblood777/rinha-de-backend-2025-node:http-module
     networks:
       - backend
       - payment-processor
