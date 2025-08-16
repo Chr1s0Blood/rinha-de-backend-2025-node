@@ -28,10 +28,10 @@ function getUndiciPoolFor(urlStr: string) {
   let pool = undiciPools.get(origin);
   if (!pool) {
     pool = new Pool(origin, {
-      connections: 256,
-      pipelining: 20,
-      keepAliveTimeout: 60_000,
-      keepAliveMaxTimeout: 120_000
+      connections: 50,
+      pipelining: 5,
+      keepAliveTimeout: 10000,
+      keepAliveMaxTimeout: 30000
     });
     undiciPools.set(origin, pool);
   }
@@ -51,20 +51,36 @@ console.log(`[zmq] Publisher bind ${bind}`);
 
 const queue: any[] = [];
 let sending = false;
+let batchTimer: NodeJS.Timeout | null = null;
 
 async function sendQueued(msg: any) {
   queue.push(msg);
-  if (sending) return;
   
-  sending = true;
-  while (queue.length > 0) {
-    const next = queue.shift();
-    await pub.send(next);
+  if (batchTimer) {
+    clearTimeout(batchTimer);
   }
-  sending = false;
-}
 
-const processedIds = new Set<string>();
+  batchTimer = setTimeout(async () => {
+    if (sending || queue.length === 0) return;
+    
+    sending = true;
+    const batch = queue.splice(0, Math.min(queue.length, 50));
+    
+    try {
+      for (const msg of batch) {
+        await pub.send(msg);
+      }
+    } catch (error) {
+      console.error("[zmq] Batch send error:", error);
+    }
+    
+    sending = false;
+    
+    if (queue.length > 0) {
+      setTimeout(() => sendQueued(queue.shift()), 5);
+    }
+  }, 5);
+}
 
 const BEST_PROCESSOR_TTL_MS = 500;
 let bestProcessorCache: { value: IBestProcessor; expiresAt: number } | null = null;
@@ -93,11 +109,12 @@ async function getBestProcessor(): Promise<IBestProcessor> {
   return bestProcessorInflight;
 }
 
-
 class PaymentQueue {
   private queue: Array<{ data: IPaymentDataRaw; retries: number; nextRetryAt: number }> = [];
   private activeWorkers = 0;
   private readonly maxConcurrency = PROCESSING_CONCURRENCY;
+  private isIdle = false;
+  private idleCheckInterval: NodeJS.Timeout | null = null;
 
   async add(data: IPaymentDataRaw, retries = 0) {
     this.queue.push({
@@ -106,11 +123,13 @@ class PaymentQueue {
       nextRetryAt: Date.now()
     });
     
-    this.processNext();
+    if (!this.isIdle) {
+      this.processNext();
+    }
   }
 
   private processNext() {
-    if (this.activeWorkers >= this.maxConcurrency) return;
+    if (this.activeWorkers >= this.maxConcurrency || this.isIdle) return;
     
     const now = Date.now();
     const itemIndex = this.queue.findIndex(item => item.nextRetryAt <= now);
@@ -134,7 +153,7 @@ class PaymentQueue {
       .finally(() => {
         this.activeWorkers--;
 
-        if (this.queue.length > 0) {
+        if (this.queue.length > 0 && !this.isIdle) {
           setImmediate(() => this.processNext());
         }
       });
@@ -142,11 +161,6 @@ class PaymentQueue {
 
   private async processPayment(item: { data: IPaymentDataRaw; retries: number; nextRetryAt: number }) {
     try {
-
-      if (processedIds.has(item.data.correlationId)) {
-        console.log("Payment already processed, skipping:", item.data.correlationId);
-        return;
-      }
 
       if (item.retries >= MAX_RETRY_ATTEMPTS) {
         console.log("Max retries reached, giving up:", item.data.correlationId);
@@ -156,7 +170,8 @@ class PaymentQueue {
       const requestedAt = new Date().toISOString();
       const bestProcessor = await getBestProcessor();
       if (bestProcessor.processor === "none") {
-        this.scheduleRetry(item);
+        this.enterIdleMode();
+        this.queue.unshift(item);
         return;
       }
 
@@ -179,7 +194,6 @@ class PaymentQueue {
       if (success) {
         const published = await safePublish("update-payment", stringData);
         if (published) {
-          processedIds.add(item.data.correlationId);
           return;
         }
       }
@@ -188,6 +202,40 @@ class PaymentQueue {
 
     } catch (error) {
       this.scheduleRetry(item);
+    }
+  }
+
+  private enterIdleMode() {
+    if (this.isIdle) return;
+    
+    this.isIdle = true;
+    console.log("[PaymentQueue] Entering idle mode - no processors available");
+    
+    this.idleCheckInterval = setInterval(async () => {
+      try {
+        const bestProcessor = await getBestProcessor();
+        if (bestProcessor.processor !== "none") {
+          this.exitIdleMode();
+        }
+      } catch (error) {
+        console.error("[PaymentQueue] Error checking processors during idle:", error);
+      }
+    }, 5000);
+  }
+
+  private exitIdleMode() {
+    if (!this.isIdle) return;
+    
+    this.isIdle = false;
+    console.log("[PaymentQueue] Exiting idle mode - processors available again");
+    
+    if (this.idleCheckInterval) {
+      clearInterval(this.idleCheckInterval);
+      this.idleCheckInterval = null;
+    }
+    
+    if (this.queue.length > 0) {
+      setImmediate(() => this.processNext());
     }
   }
 
@@ -206,7 +254,8 @@ class PaymentQueue {
   getStats() {
     return {
       queueSize: this.queue.length,
-      activeWorkers: this.activeWorkers
+      activeWorkers: this.activeWorkers,
+      isIdle: this.isIdle
     };
   }
 }
