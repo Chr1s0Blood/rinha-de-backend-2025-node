@@ -1,4 +1,5 @@
-import uWS from "uWebSockets.js";
+import http from "node:http";
+import url from "node:url";
 import fastJson from "fast-json-stringify";
 import type { IPaymentData } from "../src/types.ts";
 import fs from "node:fs";
@@ -94,56 +95,61 @@ database.exec("DELETE FROM payments");
   }
 })();
 
-uWS
-  .App({})
-  .get("/summary", (res, req) => {
-    const query = new URLSearchParams(req.getQuery());
-    const from = query.get("from");
-    const to = query.get("to");
+const server = http.createServer(async (req, res) => {
+  const parsedUrl = url.parse(req.url!, true);
+  const pathname = parsedUrl.pathname;
+  const query = parsedUrl.query;
+
+  res.setHeader("Content-Type", "application/json");
+
+  if (req.method === "GET" && pathname === "/summary") {
+    const from = query.from as string;
+    const to = query.to as string;
+
     const summary = getSummary(from!, to!);
 
-    res.writeHeader("Content-Type", "application/json");
     res.end(summary);
-  })
-  .get("/best-processor", async (res, req) => {
-    res.onAborted(() => {
-      console.log("Request aborted");
-    });
-    const processor = await getBestProcessor();
-
-    const bestProcessorData = {
-      processor: processor.processor,
-      url: processor.url,
-    };
-
-    res.cork(() => {
-      res.writeHeader("Content-Type", "application/json");
+  } else if (req.method === "GET" && pathname === "/best-processor") {
+    try {
+      const processor = await getBestProcessor();
+      const bestProcessorData = {
+        processor: processor.processor,
+        url: processor.url,
+      };
       res.end(JSON.stringify(bestProcessorData));
-    });
-  })
-  .post("/purge", (res, req) => {
+    } catch (error) {
+      res.statusCode = 500;
+
+      res.end(JSON.stringify({ error: "Failed to get best processor" }));
+    }
+  } else if (req.method === "POST" && pathname === "/purge") {
     database.exec("DELETE FROM payments");
+
     totalReceived = 0;
-    res.writeHeader("Content-Type", "application/json");
+
     res.end(JSON.stringify({ success: true }));
-  })
-  .get("/get-all", (res, req) => {
+  } else if (req.method === "GET" && pathname === "/get-all") {
     const selectStmt = database.prepare(`
       SELECT * FROM payments
     `);
+
     const rows = selectStmt.all();
 
-    res.writeHeader("Content-Type", "application/json");
     res.end(JSON.stringify(rows));
-  })
-  .listen_unix((token) => {
-    if (token) {
-      console.log(`MemoryDB is ready and listening on port ${SOCKET_PATH}...`);
-      fs.chmodSync(SOCKET_PATH, 0o766);
-    } else {
-      console.log(`Failed to listen on port ${token}`);
-    }
-  }, SOCKET_PATH);
+  } else {
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: "Not found" }));
+  }
+});
+
+server.listen(SOCKET_PATH, () => {
+  console.log(`MemoryDB is ready and listening on port ${SOCKET_PATH}...`);
+  fs.chmodSync(SOCKET_PATH, 0o766);
+});
+
+server.on("error", (err) => {
+  console.log(`Failed to listen: ${err.message}`);
+});
 
 function getSummary(from: string, to: string) {
   console.log("Fetching summary from:", from, "to:", to);

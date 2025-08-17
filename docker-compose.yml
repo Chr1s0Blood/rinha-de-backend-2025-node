@@ -70,7 +70,7 @@ services:
           memory: 115M
 
   memorydb:
-    image: chrisblood777/rinha-de-backend-2025-node-memorydb:latest
+    image: chrisblood777/rinha-de-backend-2025-node-memorydb:http-module
     networks:
       - backend
       - payment-processor

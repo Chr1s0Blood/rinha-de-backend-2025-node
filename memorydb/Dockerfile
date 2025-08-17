@@ -1,4 +1,4 @@
-FROM node:22.18.0-bookworm
+FROM node:22.18.0-bookworm-slim
 
 RUN apt-get update && apt-get install -y git
 RUN npm install -g pnpm

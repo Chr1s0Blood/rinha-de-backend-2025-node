@@ -58,54 +58,77 @@ function readJsonFromHttp(req: http.IncomingMessage): Promise<any> {
   });
 }
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+const CONTENT_TYPE_JSON = { "Content-Type": "application/json" };
+const CONTENT_TYPE_TEXT = { "Content-Type": "text/plain" };
+
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url!, `http://${req.headers.host}`);
-  const pathname = url.pathname;
+  req.socket.setNoDelay(true);
+
+  Object.assign(res.getHeaders(), CORS_HEADERS);
+
   const method = req.method;
 
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
   if (method === "OPTIONS") {
-    res.writeHead(200);
+    res.writeHead(200, CORS_HEADERS);
     res.end();
     return;
   }
 
+  const url = req.url!;
+
   try {
-    if (method === "POST" && pathname === "/payments") {
-      try {
-        const body = await readJsonFromHttp(req);
-        addPaymentToBatch(body);
-        res.writeHead(201, { "Content-Type": "text/plain" });
-        res.end("");
-      } catch (error) {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("");
+    if (method === "POST") {
+      if (url === "/payments") {
+        try {
+          const body = await readJsonFromHttp(req);
+          addPaymentToBatch(body);
+          res.writeHead(201, { ...CORS_HEADERS, ...CONTENT_TYPE_TEXT });
+          res.end();
+        } catch (error) {
+          res.writeHead(400, { ...CORS_HEADERS, ...CONTENT_TYPE_TEXT });
+          res.end();
+        }
+        return;
       }
-    } else if (method === "GET" && pathname === "/payments-summary") {
-      const searchParams = url.searchParams;
-      const from = searchParams.get("from");
-      const to = searchParams.get("to");
 
-      const summary = await getSummaryFromDb(from!, to!);
+      if (url === "/purge-payments") {
+        await purgePayments();
+        res.writeHead(200, { ...CORS_HEADERS, ...CONTENT_TYPE_TEXT });
+        res.end();
+        return;
+      }
+    } else if (method === "GET") {
+      if (url.startsWith("/payments-summary")) {
+        const urlObj = new URL(url, `http://${req.headers.host}`);
+        const searchParams = urlObj.searchParams;
+        const from = searchParams.get("from");
+        const to = searchParams.get("to");
 
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(summary);
-    } else if (method === "POST" && pathname === "/purge-payments") {
-      await purgePayments();
-      res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end("");
-    } else {
-      res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("Not Found");
+        const summary = await getSummaryFromDb(from!, to!);
+
+        res.writeHead(200, { ...CORS_HEADERS, ...CONTENT_TYPE_JSON });
+        res.end(summary);
+        return;
+      }
     }
   } catch (error) {
     console.error("Server error:", error);
-    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.writeHead(500, { ...CORS_HEADERS, ...CONTENT_TYPE_TEXT });
     res.end("Internal Server Error");
   }
+});
+
+server.keepAliveTimeout = 5000;
+
+server.on("connection", (socket) => {
+  socket.setKeepAlive(true, 1000);
+  socket.setNoDelay(true);
 });
 
 switch (process.env.NODE_ENV) {

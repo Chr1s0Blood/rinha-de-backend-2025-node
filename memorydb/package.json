@@ -14,7 +14,6 @@
   "dependencies": {
     "better-sqlite3": "^12.2.0",
     "fast-json-stringify": "^6.0.1",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "undici": "^7.13.0",
     "zeromq": "^6.5.0"
   },
@@ -25,6 +24,9 @@
     "typescript": "^5.8.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "zeromq", "uWebSockets.js"]
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "zeromq"
+    ]
   }
 }
