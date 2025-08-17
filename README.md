@@ -1,13 +1,34 @@
-Solução para a Rinha de Backend 2025 (com NodeJS)
+# Rinha de Backend 2025 - Solução Node.js
 
-- Foi usado uma instancia como memorydb (sqlite in-memory);
-- API usando uWebSockets com Unix Socket; 
-- Pub/Sub com zeromq via ipc unix socket (baixo overhead); 
-- HAProxy como lb se comunicando via unix socket com os dois backend;
+## Arquitetura
 
-Melhor resultado do teste prévio: https://github.com/zanfranceschi/rinha-de-backend-2025/commit/c909b7bf22dab1d3b9d9181541ac3e90d8db4888
+### Componentes Principais
+- **Database**: SQLite in-memory para máxima velocidade de acesso
+- **API Server**: HTTP Module nativo com comunicação via Unix Socket
+- **Message Queue**: ZeroMQ com IPC Unix Socket (overhead mínimo)
+- **Load Balancer**: HAProxy distribuindo requisições via Unix Socket
 
-```json
+### Stack
+- **Runtime**: Node.js
+- **HTTP Server**: HTTP Module Nativo
+- **Database**: SQLite (in-memory)
+- **Message Broker**: ZeroMQ
+- **Load Balancer**: HAProxy
+- **Transport**: Unix Domain Sockets
+
+## Resultados de Performance
+
+**Melhor resultado obtido**: [Commit c909b7b](https://github.com/zanfranceschi/rinha-de-backend-2025/commit/c909b7bf22dab1d3b9d9181541ac3e90d8db4888)
+
+**Link da pasta**: [Pasta atualizada](https://github.com/zanfranceschi/rinha-de-backend-2025/tree/main/participantes/cristian-s-node-2-http)
+
+### Métricas Principais
+- **Lucro Total**: R$ 361.789,76
+- **P99 Latência**: 2.93ms (Bônus: 16%)
+- **Requests Máximas**: 550
+- **Pagamentos Processados**: 16.745/16.745 (0% de perda)
+
+````json
 {
   "participante": "cristian-s-node-2-http",
   "total_liquido": 361789.7609999737,
@@ -56,6 +77,16 @@ Melhor resultado do teste prévio: https://github.com/zanfranceschi/rinha-de-bac
     "descricao": "Informações do backend sobre solicitações de pagamento para o Payment Processor Fallback."
   }
 }
-```
+````
 
-Foi usado a imagem "chrisblood777/rinha-de-backend-2025-node:http-module" nas APIs para esse resultado.
+### Destaques da Performance
+-  **Zero inconsistências** - Nenhuma multa aplicada
+-  **Zero lag** - Todos os pagamentos processados
+-  **P99 excelente** - 2.93ms garantindo bônus de 16%
+-  **Alta disponibilidade** - 100% de sucesso nas requisições
+
+## Deployment
+
+**Imagem Docker utilizada API**: `chrisblood777/rinha-de-backend-2025-node:http-module`
+
+**Imagem Docker utilizada MemoryDB**: `chrisblood777/rinha-de-backend-2025-node-memorydb:latest`
