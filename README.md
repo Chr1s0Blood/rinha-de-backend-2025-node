@@ -22,6 +22,8 @@
 
 **Link da pasta**: [Pasta atualizada](https://github.com/zanfranceschi/rinha-de-backend-2025/tree/main/participantes/cristian-s-node-2-http)
 
+**Print do ranking prévio**: [Link](https://i.ibb.co/M59DH9J8/image.png)
+
 ### Métricas Principais
 - **Lucro Total**: R$ 361.789,76
 - **P99 Latência**: 2.93ms (Bônus: 16%)
