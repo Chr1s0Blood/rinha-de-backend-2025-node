@@ -27,7 +27,8 @@ function sendBatchToWorker() {
 }
 
 function addPaymentToBatch(payment: any) {
-  paymentBatch.push(payment);
+  setImmediate(() => {
+    paymentBatch.push(JSON.parse(payment));
 
   if (paymentBatch.length >= BATCH_SIZE) {
     sendBatchToWorker();
@@ -38,6 +39,7 @@ function addPaymentToBatch(payment: any) {
       }, BATCH_TIMEOUT);
     }
   }
+  })
 }
 
 function readJsonFromHttp(req: http.IncomingMessage): Promise<any> {
@@ -48,8 +50,7 @@ function readJsonFromHttp(req: http.IncomingMessage): Promise<any> {
     });
     req.on("end", () => {
       try {
-        const parsed = JSON.parse(body);
-        resolve(parsed);
+        resolve(body)
       } catch (error) {
         reject(error);
       }

@@ -24,8 +24,6 @@ const database = new bsql(":memory:");
 database.pragma("journal_mode = OFF");
 database.pragma("synchronous = OFF");
 
-let totalReceived = 0;
-
 const SOCKET_PATH = process.env.SOCKET_PATH!;
 
 if (fs.existsSync(SOCKET_PATH)) {
@@ -90,12 +88,14 @@ database.exec("DELETE FROM payments");
         paymentData.amount
       );
 
-      totalReceived++;
     });
   }
 })();
 
 const server = http.createServer(async (req, res) => {
+
+  req.socket.setNoDelay(true);
+
   const parsedUrl = url.parse(req.url!, true);
   const pathname = parsedUrl.pathname;
   const query = parsedUrl.query;
@@ -125,7 +125,6 @@ const server = http.createServer(async (req, res) => {
   } else if (req.method === "POST" && pathname === "/purge") {
     database.exec("DELETE FROM payments");
 
-    totalReceived = 0;
 
     res.end(JSON.stringify({ success: true }));
   } else if (req.method === "GET" && pathname === "/get-all") {
