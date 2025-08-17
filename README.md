@@ -85,8 +85,8 @@
 -  **P99 excelente** - 2.93ms garantindo bônus de 16%
 -  **Alta disponibilidade** - 100% de sucesso nas requisições
 
-## Deployment
+## Deployment do melhor resultado obtido
 
-**Imagem Docker utilizada API**: `chrisblood777/rinha-de-backend-2025-node:http-module`
+**IMG Docker utilizada API**: `chrisblood777/rinha-de-backend-2025-node:http-module`
 
-**Imagem Docker utilizada MemoryDB**: `chrisblood777/rinha-de-backend-2025-node-memorydb:latest`
+**IMG Docker utilizada MemoryDB**: `chrisblood777/rinha-de-backend-2025-node-memorydb:latest`
