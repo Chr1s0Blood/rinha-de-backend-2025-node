@@ -12,7 +12,6 @@ export function readJsonFromUWS(res: HttpResponse): Promise<any> {
 
       if (isLast) {
         try {
-          // Usa Buffer.concat uma única vez com tamanho conhecido
           const finalBuffer = Buffer.concat(chunks, totalSize);
           const json = JSON.parse(finalBuffer.toString());
           resolve(json);

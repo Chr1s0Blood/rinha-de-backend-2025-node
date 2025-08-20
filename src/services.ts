@@ -32,6 +32,7 @@ export async function purgePayments(): Promise<void> {
     });
 }
 
+// debug apenas
 export async function getAllPayments(): Promise<IPaymentData[]> {
   const response = await client.request({
     method: "GET",

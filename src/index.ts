@@ -146,6 +146,7 @@ switch (process.env.NODE_ENV) {
     break;
 }
 
+// Isso aqui foi uma ideia para ter mais de um worker, mas não foi implementada por testes locais não satisfatórios com mais de 1 worker
 const totalWorkers = 1;
 const allSuffixes = process.env.ZEROMQ_SUFFIXS!.split(",").map((s) => s.trim());
 
