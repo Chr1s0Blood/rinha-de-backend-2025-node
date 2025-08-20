@@ -5,14 +5,14 @@
 ### Componentes Principais
 - **Database**: SQLite in-memory para máxima velocidade de acesso
 - **API Server**: uWebSockets com comunicação via Unix Socket
-- **Message Queue**: ZeroMQ com IPC Unix Socket (overhead mínimo)
+- **Messaging**: ZeroMQ com IPC Unix Socket (overhead mínimo)
 - **Load Balancer**: HAProxy distribuindo requisições via Unix Socket
 
 ### Stack
 - **Runtime**: Node.js
 - **HTTP Server**: uWebSockets
 - **Database**: SQLite (in-memory)
-- **Message Broker**: ZeroMQ
+- **Messaging**: ZeroMQ
 - **Load Balancer**: HAProxy
 - **Transport**: Unix Domain Sockets
 
